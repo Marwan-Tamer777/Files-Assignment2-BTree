@@ -68,6 +68,18 @@ int getFileSize(fstream& f){
     return full;
 };
 
+BTreeNode readTreeNode(){
+    BTreeNode btn;
+    btn.stateFlag = stoi (readBytes(fBTree, 4));
+    btn.parentOrNextDel = stoi (readBytes(fBTree, 4));
+    for(int i=0;i<M_SIZE/2;i++){
+        BTreeNodeUnit btnu;
+        btnu.value = stoi (readBytes(fBTree, 4));
+        btnu.reference = stoi (readBytes(fBTree, 4));
+        btn.nodes.push_back(btnu);
+    }
+    return btn;
+};
 void writeTreeNode(BTreeNode btn){
     writeBytes(fBTree,FIELD_SIZE,btn.stateFlag);
     writeBytes(fBTree,FIELD_SIZE,btn.parentOrNextDel);
