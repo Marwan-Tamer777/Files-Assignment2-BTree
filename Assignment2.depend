@@ -1,0 +1,14 @@
+# depslib dependency file v1.0
+1670792150 source:g:\studies\files\assignment2\main.cpp
+	<iostream>
+	"utils.cpp"
+
+1670792822 g:\studies\files\assignment2\utils.cpp
+	<cstdlib>
+	<iostream>
+	<fstream>
+	<algorithm>
+	<string>
+	<cstring>
+	<vector>
+
