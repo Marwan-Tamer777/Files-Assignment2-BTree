@@ -25,9 +25,13 @@ const int DEL_FLAG = -1;
 const int NODE_FLAG = 1;
 const int LEAF_FLAG = 0;
 const int FIELD_SIZE = 4;
+const string NODE_DELIMITER = "|-|";
+//User Inputted values;
+int NUM_OF_RECORDS;
 int M_SIZE;// = 8;
-int NODE_SIZE;// = FIELD_SIZE*(2+M_SIZE/2);
+int NODE_SIZE;// = FIELD_SIZE*(2+M_SIZE) + NODE_DELIMITER.length());
 fstream fBTree;
+
 //Record example:
 //   1   2   A   3   B   7   C   3   Y   9
 
@@ -88,6 +92,13 @@ BTreeNode getEmptyNode(){
     return btn;
 };
 
+BTreeNodeUnit getEmptyNodeUnit(){
+    BTreeNodeUnit btnu;
+    btnu.reference = -1;
+    btnu.value = -1;
+    return btnu;
+};
+
 BTreeNode readTreeNode(){
 
     BTreeNode btn;
@@ -100,6 +111,7 @@ BTreeNode readTreeNode(){
         btnu.reference = stoi(readBytes(fBTree, 4));
         btn.nodes.push_back(btnu);
     }
+    readBytes(fBTree, NODE_DELIMITER.length());
     /*
     string s;
     readline(fBTree,s);
@@ -142,6 +154,7 @@ void writeTreeNode(BTreeNode btn){
         writeBytes(fBTree,FIELD_SIZE,to_string(btn.nodes[i].value));
         writeBytes(fBTree,FIELD_SIZE,to_string(btn.nodes[i].reference));
     }
+    fBTree<<NODE_DELIMITER;
     //fBTree<<endl;
 };
 
@@ -169,7 +182,9 @@ int getBiggestNum(vector<BTreeNodeUnit> v){
     return biggest;
 };
 
-
+int getNodeRRN(BTreeNode btn){
+    return btn.byteOffset/NODE_SIZE;
+};
 //Parameter function to sort the btree node units vector.
 bool NodesSorterAscending(BTreeNodeUnit const& lbtnu, BTreeNodeUnit const& rbtnu) {
     if(rbtnu.value == DEL_FLAG){return true;}
@@ -177,126 +192,21 @@ bool NodesSorterAscending(BTreeNodeUnit const& lbtnu, BTreeNodeUnit const& rbtnu
     return lbtnu.value < rbtnu.value;
 };
 
-void CreateIndexFile(char* fileName,int numberOfRecord, int m){
-    fBTree.open(fileName, ios::in | ios::out | ios::trunc);
-    M_SIZE = m;
-    NODE_SIZE = FIELD_SIZE*(2+M_SIZE);
-
-    fBTree.seekg(0,ios::beg);
-    BTreeNode btn;
-    BTreeNodeUnit btnu;
-    vector<BTreeNodeUnit> v;
-    btnu.reference = -1;
-    btnu.value = -1;
-
-    for(int i=0;i<M_SIZE/2;i++){
-        v.push_back(btnu);
+void printFixedLengthField(int length,int value){
+    int valueLength = to_string(value).length();
+    while(length>valueLength){
+        cout<<" ";
+        valueLength++;
     }
+    cout<<value;
+}
 
-    btn.stateFlag = DEL_FLAG;
-    btn.nodes = v;
-
-    for(int i=1;i<=numberOfRecord;i++){
-        btn.parentOrNextDel = i;
-        if(i==numberOfRecord){btn.parentOrNextDel = -1;}
-        writeTreeNode(btn);
+void printBTreeNode(BTreeNode btn){
+    printFixedLengthField(FIELD_SIZE,btn.stateFlag);
+    printFixedLengthField(FIELD_SIZE,btn.parentOrNextDel);
+    for(int i=0;i<btn.nodes.size();i++){
+        printFixedLengthField(FIELD_SIZE,btn.nodes[i].value);
+    printFixedLengthField(FIELD_SIZE,btn.nodes[i].reference);
     }
-
-};
-
-
-int InsertNewRecordAtIndex(char* filename, int RecordID, int Reference) {
-    //we start with the root node and check if it's empty or not.
-    fBTree.seekg(NODE_SIZE,ios::beg);
-    BTreeNode btn= readTreeNode();
-    vector<BTreeNodeUnit> v;
-
-    if(btn.stateFlag == -1){
-        //Root is empty so we overwrite it into a leaf
-        BTreeNodeUnit btnu;
-        btnu.value = RecordID;
-        btnu.reference = Reference;
-        btn.stateFlag = LEAF_FLAG;
-        btn.parentOrNextDel = DEL_FLAG;
-        btn.nodes[0] = btnu;
-        writeFirstDelTreeNode(btn);
-        return 1;
-    }
-
-    //Root is not empty, we will traverse to the correct leaf node;
-
-    while(btn.stateFlag != LEAF_FLAG){
-
-        v = btn.nodes;
-        int nextRRN;
-
-        for(int i = 0;i<v.size();i++){
-            //Takes the next Node reference until it either reaches
-            // end of vector or finds a node it's value is less than it;
-            if(v[i].value == DEL_FLAG){break;}
-            nextRRN = v[i].reference;
-            if(RecordID<= v[i].value){break;}
-        }
-
-        fBTree.seekg(nextRRN*NODE_SIZE,ios::beg);
-        btn = readTreeNode();
-    }
-
-    v = btn.nodes;
-    for(int i = 0;i<v.size();i++){
-        //if there was empty slots in the leaf node we will add to the vector and sort
-        //then write it in it's place and move to the parent
-        if(v[i].value == DEL_FLAG && v[i].reference == DEL_FLAG){
-            BTreeNodeUnit btnu;
-            btnu.value = RecordID;
-            btnu.reference = Reference;
-            v[i] = btnu;
-            sort(v.begin(),v.end(),&NodesSorterAscending);
-            btn.nodes = v;
-
-            fBTree.seekg(btn.byteOffset,ios::beg);
-            writeTreeNode(btn);
-
-            //then we seek the parents until we reach the root to check on the values if it needs updating
-            int childNodeReference = fBTree.tellg()/NODE_SIZE -1;
-            while(childNodeReference != 1/*btn.parentOrNextDel == DEL_FLAG*/){
-
-                //we start at the end of the child node to get some values;
-                int biggest = getBiggestNum(v);
-                fBTree.seekg(btn.parentOrNextDel*FIELD_SIZE,ios::beg);
-
-                //get parent node details.
-                btn = readTreeNode();
-                v = btn.nodes;
-                //loop on parent references till we get the child's we came from reference
-                for(int x = 0;x<v.size();x++){
-                    if(v[x].reference = childNodeReference){
-                        v[x].value = biggest;
-                    }
-                }
-
-                //Overwrite parent node in case the values should be updates;
-                fBTree.seekg(btn.byteOffset,ios::beg);
-                writeTreeNode(btn);
-                childNodeReference = fBTree.tellg()/NODE_SIZE -1;
-            }
-            return 1;
-        } else {
-            //we do a split here and check if you are splitting the root as it is a special case.
-        }
-    }
-
-
-};
-
-void DeleteRecordFromIndex(char* filename, int RecordID) {
-
-};
-
-void DisplayIndexFileContent(char* filename) {
-
-};
-
-int SearchARecord(char* filename, int RecordID) {
-
-};
+    cout<<endl;
+}
