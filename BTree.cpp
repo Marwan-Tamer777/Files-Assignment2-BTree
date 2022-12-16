@@ -45,16 +45,13 @@ int InsertNewRecordAtIndex(char* filename, int RecordID, int Reference) {
         writeFirstDelTreeNode(btn, DEL_FLAG);
         return 1;
     }
-
     //Root is not empty, we will traverse to the correct leaf node;
     btn = searchTillLeaf(RecordID);
-
     //btn now have the leaf node that the new value should be inserted at.
     btnu.value = RecordID;
     btnu.reference = Reference;
     //If it cannot be inserted in that leaf node, the insert function will split.
-    int insertedAtInd = insertRecordInNode(btn,btnu);
-    if(insertedAtInd != DEL_FLAG){return insertedAtInd;}
+    return insertRecordInNode(btn,btnu);
 
 };
 

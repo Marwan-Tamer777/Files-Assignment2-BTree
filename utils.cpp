@@ -41,6 +41,7 @@ fstream fBTree;
 //Deleted Record Example
 //  -1   2  -1  -1  -1  -1  -1  -1  -1  -1
 
+//Reads a specific number of bytes. used in more complex read functions.
 string readBytes(fstream &f,int byteCount){
     char temp = ' ';
     string value= "";
@@ -51,7 +52,7 @@ string readBytes(fstream &f,int byteCount){
     return value;
 };
 
-
+//Writes a specific number of bytes. used in more complex write functions.
 void writeBytes(fstream& f,int fSize,string s){
     int actualSize = s.length();
     int diff = fSize-actualSize;
@@ -103,6 +104,9 @@ BTreeNodeUnit getEmptyNodeUnit(){
     return btnu;
 };
 
+//Reads a while Node from the data file (size is Dependant on the M size values the users inputs.
+//And returns  a BTreeNode object.
+//Navigate first to the Node you want to read in the file.
 BTreeNode readTreeNode(){
 
     BTreeNode btn;
@@ -134,6 +138,9 @@ BTreeNode readTreeNode(){
     return btn;
 };
 
+//Returns the first deleted node from the AvailList, returns an empty node if none are available.
+//You can Error check the Returned node by seeing if it's ByteOffset is -1 (An empty not real node)
+//Or an actual value (A node that exists in the Index file.
 BTreeNode readFirstDelTreeNode(){
     int currentPos = fBTree.tellg();
     int nextDeletedIndex;
@@ -151,6 +158,8 @@ BTreeNode readFirstDelTreeNode(){
     return btn;
 };
 
+//Writes a BTreeNode object into the Index file.
+//Please navigate to the Node you want to write in the file before using this.
 void writeTreeNode(BTreeNode btn){
     writeBytes(fBTree,FIELD_SIZE,to_string(btn.stateFlag));
     writeBytes(fBTree,FIELD_SIZE,to_string(btn.parentOrNextDel));
@@ -162,6 +171,9 @@ void writeTreeNode(BTreeNode btn){
     //fBTree<<endl;
 };
 
+//Writes the first Deleted Node in the Index Files and updates the Avail List Header.
+//Needs both the new node to be written and it's parent index.
+//Does not require you to navigate first before using this function.
 void writeFirstDelTreeNode(BTreeNode btn,int newParentIndex){
     BTreeNode delBtn = readFirstDelTreeNode();
     int nextDeletedNode = delBtn.parentOrNextDel;
@@ -173,9 +185,10 @@ void writeFirstDelTreeNode(BTreeNode btn,int newParentIndex){
     //Overwrites the next item on the avail list in the header node.
     fBTree.seekg(FIELD_SIZE,ios::beg);
     writeBytes(fBTree,FIELD_SIZE,to_string(nextDeletedNode));
+    fBTree.seekg(0,ios::beg);
 };
 
-
+//Gets the biggest value from the vector of any node to use in the Update Parent function.
 int getBiggestNum(vector<BTreeNodeUnit> v){
     int biggest = -1;
 
@@ -192,7 +205,7 @@ int getNodeRRN(BTreeNode btn){
     return btn.byteOffset/NODE_SIZE;
 };
 
-
+//Navigates the Tree upwards till the leaf and updates each parent with it's children Biggest value.
 void updateParents(BTreeNode btn){
     vector<BTreeNodeUnit> v = btn.nodes;
     int childNodeReference = btn.byteOffset/NODE_SIZE;
@@ -201,18 +214,20 @@ void updateParents(BTreeNode btn){
 
         //we start at the end of the child node to get some values;
         int biggest = getBiggestNum(v);
-        fBTree.seekg(btn.parentOrNextDel*FIELD_SIZE,ios::beg);
+        fBTree.seekg(btn.parentOrNextDel*NODE_SIZE,ios::beg);
 
         //get parent node details.
         btn = readTreeNode();
         v = btn.nodes;
         //loop on parent references till we get the child's reference we just came from.
         for(int x = 0;x<v.size();x++){
-            if(v[x].reference = childNodeReference){
+            if(v[x].reference == childNodeReference){
                 v[x].value = biggest;
+                break;
             }
         }
 
+        btn.nodes = v;
         //Overwrite parent node in case the values should be updated;
         fBTree.seekg(btn.byteOffset,ios::beg);
         writeTreeNode(btn);
@@ -227,7 +242,9 @@ bool NodesSorterAscending(BTreeNodeUnit const& lbtnu, BTreeNodeUnit const& rbtnu
     return lbtnu.value < rbtnu.value;
 };
 
-
+//Inserts a specific record in a specific node.
+//Used in other insertions Functions to allow Recursion as when splitting you will
+//Need to insert new values in the parent and maybe split again.
 int insertRecordInNode(BTreeNode btn, BTreeNodeUnit btnu){
     vector<BTreeNodeUnit> v = btn.nodes;
     for(int i = 0;i<v.size();i++){
@@ -246,15 +263,19 @@ int insertRecordInNode(BTreeNode btn, BTreeNodeUnit btnu){
             return getNodeRRN(btn);
         }
     }
-
     return splitNode(btn,btnu);
 };
 
+
+//Takes the node you want to split and the new Record that is to be added into it.
+//It creates 2 nodes, splits the vector of the original node.
+//Write the 2 nodes again then updates parents and adds new value to the immediate of the new nodes.
+//Has a special case if the node to split is root as then it requires 3 nodes (The root and 2 empty nodes)
 int splitNode(BTreeNode btn,BTreeNodeUnit btnu){
     //we do a split here and check if you are splitting the root as it is a special case.
     if(btn.byteOffset/NODE_SIZE == 1 ){
         BTreeNode btn2 = readFirstDelTreeNode();
-        fBTree.seekg(btn2.parentOrNextDel*FIELD_SIZE,ios::beg);
+        fBTree.seekg(btn2.parentOrNextDel*NODE_SIZE,ios::beg);
         BTreeNode btn3 = readTreeNode();
         vector<BTreeNodeUnit> v;
         vector<BTreeNodeUnit> newV1;
@@ -268,7 +289,7 @@ int splitNode(BTreeNode btn,BTreeNodeUnit btnu){
 
         //Splits the Records vector into 2 new vectors and reassigns them into the 2 nodes
         for(int i=0;i<v.size();i++){
-            if(i<=v.size()/2){
+            if(i<v.size()/2){
                 newV2.push_back(v[i]);
             }else{
                 newV3.push_back(v[i]);
@@ -296,9 +317,11 @@ int splitNode(BTreeNode btn,BTreeNodeUnit btnu){
         btn.nodes = newV1;
         btn2.nodes = newV2;
         btn3.nodes = newV3;
-        btn2.stateFlag = PARENT_FLAG;
-        btn2.stateFlag = LEAF_FLAG;
-        btn3.stateFlag = LEAF_FLAG;
+        btn2.stateFlag = btn.stateFlag == LEAF_FLAG ? LEAF_FLAG : PARENT_FLAG;
+        btn3.stateFlag = btn.stateFlag == LEAF_FLAG ? LEAF_FLAG : PARENT_FLAG;
+        btn.stateFlag = PARENT_FLAG;
+        btn2.parentOrNextDel = 1;
+        btn3.parentOrNextDel = 1;
         fBTree.seekg(NODE_SIZE,ios::beg);
         writeTreeNode(btn);
         writeFirstDelTreeNode(btn2,1);
@@ -318,7 +341,7 @@ int splitNode(BTreeNode btn,BTreeNodeUnit btnu){
 
         //Splits the Records vector into 2 new vectors and reassigns them into the 2 nodes
         for(int i=0;i<v.size();i++){
-            if(i<=v.size()/2){
+            if(i<v.size()/2){
                 newV1.push_back(v[i]);
             }else{
                 newV2.push_back(v[i]);
@@ -337,16 +360,17 @@ int splitNode(BTreeNode btn,BTreeNodeUnit btnu){
         fBTree.seekg(btn.byteOffset,ios::beg);
         writeTreeNode(btn);
         btn2.stateFlag = btn.stateFlag;
+        btn2.parentOrNextDel = btn.parentOrNextDel;
         writeFirstDelTreeNode(btn2,btn.parentOrNextDel);
 
         //Update parent value in respect to the old node then add the new split node reference.
         updateParents(btn);
-        fBTree.seekg(btn.parentOrNextDel*FIELD_SIZE,ios::beg);
+        fBTree.seekg(btn.parentOrNextDel*NODE_SIZE,ios::beg);
         btn = readTreeNode();
         btnu.value = getBiggestNum(btn2.nodes);
-        btnu.reference = btn.byteOffset/FIELD_SIZE;
+        btnu.reference = btn2.byteOffset/NODE_SIZE;
         insertRecordInNode(btn,btnu);
-        return getNodeRRN(btn2);
+        return getNodeRRN(btn);
     }
 };
 
@@ -369,17 +393,18 @@ void printBTreeNode(BTreeNode btn){
     cout<<endl;
 }
 
+
+//Navigates the tree from root to find the leaf that 'should' contain the given value.
+//Does not check if that node actually holds the value or not.
 BTreeNode searchTillLeaf(int RecordID){
     fBTree.seekg(NODE_SIZE,ios::beg);
     BTreeNode btn= readTreeNode();
     vector<BTreeNodeUnit> v;
-
     //Navigate till the leaf node that might hold the ID value.
     while(btn.stateFlag != LEAF_FLAG){
 
         v = btn.nodes;
         int nextRRN;
-
         for(int i = 0;i<v.size();i++){
             //Takes the next Node reference until it either reaches
             // end of vector or finds a node it's value is less than it.
@@ -387,7 +412,6 @@ BTreeNode searchTillLeaf(int RecordID){
             nextRRN = v[i].reference;
             if(RecordID<= v[i].value){break;}
         }
-
         fBTree.seekg(nextRRN*NODE_SIZE,ios::beg);
         btn = readTreeNode();
     }

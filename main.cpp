@@ -14,6 +14,21 @@ int main()
     InsertNewRecordAtIndex(f,10,48);
     InsertNewRecordAtIndex(f,14,72);
     InsertNewRecordAtIndex(f,24,60);
+    InsertNewRecordAtIndex(f,19,84);
+    InsertNewRecordAtIndex(f,30,96);
+    InsertNewRecordAtIndex(f,15,108);
+    InsertNewRecordAtIndex(f,1,120);
+    InsertNewRecordAtIndex(f,5,132);
+    InsertNewRecordAtIndex(f,2,144);
+    InsertNewRecordAtIndex(f,8,156);
+    InsertNewRecordAtIndex(f,9,168);
+    InsertNewRecordAtIndex(f,6,180);
+    InsertNewRecordAtIndex(f,11,192);
+    InsertNewRecordAtIndex(f,12,204);
+    InsertNewRecordAtIndex(f,17,216);
+    InsertNewRecordAtIndex(f,18,228);
+    InsertNewRecordAtIndex(f,32,240);
+
     DisplayIndexFileContent(f);
 
     int test;
