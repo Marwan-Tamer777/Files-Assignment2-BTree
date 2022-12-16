@@ -32,17 +32,17 @@ int InsertNewRecordAtIndex(char* filename, int RecordID, int Reference) {
     //we start with the root node and check if it's empty or not.
     fBTree.seekg(NODE_SIZE,ios::beg);
     BTreeNode btn= readTreeNode();
+    BTreeNodeUnit btnu;
     vector<BTreeNodeUnit> v;
 
     if(btn.stateFlag == -1){
-        //Root is empty so we overwrite it into a leaf
-        BTreeNodeUnit btnu;
+        //Root is completely empty so we overwrite it into a leaf
         btnu.value = RecordID;
         btnu.reference = Reference;
         btn.stateFlag = LEAF_FLAG;
         btn.parentOrNextDel = DEL_FLAG;
         btn.nodes[0] = btnu;
-        writeFirstDelTreeNode(btn);
+        writeFirstDelTreeNode(btn, DEL_FLAG);
         return 1;
     }
 
@@ -50,49 +50,12 @@ int InsertNewRecordAtIndex(char* filename, int RecordID, int Reference) {
     btn = searchTillLeaf(RecordID);
 
     //btn now have the leaf node that the new value should be inserted at.
-    v = btn.nodes;
-    for(int i = 0;i<v.size();i++){
-        //if there was empty slots in the leaf node we will add to the vector and sort
-        //then write it in it's place and move to the parent
-        if(v[i].value == DEL_FLAG && v[i].reference == DEL_FLAG){
-            BTreeNodeUnit btnu;
-            btnu.value = RecordID;
-            btnu.reference = Reference;
-            v[i] = btnu;
-            sort(v.begin(),v.end(),&NodesSorterAscending);
-            btn.nodes = v;
+    btnu.value = RecordID;
+    btnu.reference = Reference;
+    //If it cannot be inserted in that leaf node, the insert function will split.
+    int insertedAtInd = insertRecordInNode(btn,btnu);
+    if(insertedAtInd != DEL_FLAG){return insertedAtInd;}
 
-            fBTree.seekg(btn.byteOffset,ios::beg);
-            writeTreeNode(btn);
-
-            //then we seek the parents until we reach the root to check on the values if it needs updating
-            int childNodeReference = fBTree.tellg()/NODE_SIZE -1;
-            while(childNodeReference != 1/*btn.parentOrNextDel == DEL_FLAG*/){
-
-                //we start at the end of the child node to get some values;
-                int biggest = getBiggestNum(v);
-                fBTree.seekg(btn.parentOrNextDel*FIELD_SIZE,ios::beg);
-
-                //get parent node details.
-                btn = readTreeNode();
-                v = btn.nodes;
-                //loop on parent references till we get the child's we came from reference
-                for(int x = 0;x<v.size();x++){
-                    if(v[x].reference = childNodeReference){
-                        v[x].value = biggest;
-                    }
-                }
-
-                //Overwrite parent node in case the values should be updates;
-                fBTree.seekg(btn.byteOffset,ios::beg);
-                writeTreeNode(btn);
-                childNodeReference = fBTree.tellg()/NODE_SIZE -1;
-            }
-            //The new record been inserted successfully in a node with empty data and the node index is returned.
-            return btn.byteOffset/NODE_SIZE;
-        }
-    }
-    //we do a split here and check if you are splitting the root as it is a special case.
 };
 
 void DeleteRecordFromIndex(char* filename, int RecordID) {

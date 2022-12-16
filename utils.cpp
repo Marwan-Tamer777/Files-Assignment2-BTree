@@ -20,9 +20,12 @@ struct BTreeNode{
     vector<BTreeNodeUnit> nodes;
 };
 
+//Functions Definitions
+int splitNode(BTreeNode,BTreeNodeUnit);
+
 //Basic values for testing gets overridden in run time.
 const int DEL_FLAG = -1;
-const int NODE_FLAG = 1;
+const int PARENT_FLAG = 1;
 const int LEAF_FLAG = 0;
 const int FIELD_SIZE = 4;
 const string NODE_DELIMITER = "|-|";
@@ -81,6 +84,7 @@ BTreeNode getEmptyNode(){
 
     btn.stateFlag = DEL_FLAG;
     btn.parentOrNextDel = -1;
+    btn.byteOffset = -1;
     btnu.reference = -1;
     btnu.value = -1;
 
@@ -158,13 +162,15 @@ void writeTreeNode(BTreeNode btn){
     //fBTree<<endl;
 };
 
-void writeFirstDelTreeNode(BTreeNode btn){
+void writeFirstDelTreeNode(BTreeNode btn,int newParentIndex){
     BTreeNode delBtn = readFirstDelTreeNode();
     int nextDeletedNode = delBtn.parentOrNextDel;
+    delBtn.parentOrNextDel = newParentIndex;
     fBTree.seekg(delBtn.byteOffset,ios::beg);
 
     writeTreeNode(btn);
 
+    //Overwrites the next item on the avail list in the header node.
     fBTree.seekg(FIELD_SIZE,ios::beg);
     writeBytes(fBTree,FIELD_SIZE,to_string(nextDeletedNode));
 };
@@ -185,11 +191,163 @@ int getBiggestNum(vector<BTreeNodeUnit> v){
 int getNodeRRN(BTreeNode btn){
     return btn.byteOffset/NODE_SIZE;
 };
+
+
+void updateParents(BTreeNode btn){
+    vector<BTreeNodeUnit> v = btn.nodes;
+    int childNodeReference = btn.byteOffset/NODE_SIZE;
+
+    while(childNodeReference != 1/*btn.parentOrNextDel == DEL_FLAG*/){
+
+        //we start at the end of the child node to get some values;
+        int biggest = getBiggestNum(v);
+        fBTree.seekg(btn.parentOrNextDel*FIELD_SIZE,ios::beg);
+
+        //get parent node details.
+        btn = readTreeNode();
+        v = btn.nodes;
+        //loop on parent references till we get the child's reference we just came from.
+        for(int x = 0;x<v.size();x++){
+            if(v[x].reference = childNodeReference){
+                v[x].value = biggest;
+            }
+        }
+
+        //Overwrite parent node in case the values should be updated;
+        fBTree.seekg(btn.byteOffset,ios::beg);
+        writeTreeNode(btn);
+        childNodeReference = btn.byteOffset/NODE_SIZE;
+    }
+};
+
 //Parameter function to sort the btree node units vector.
 bool NodesSorterAscending(BTreeNodeUnit const& lbtnu, BTreeNodeUnit const& rbtnu) {
     if(rbtnu.value == DEL_FLAG){return true;}
     if(lbtnu.value == DEL_FLAG){return false;}
     return lbtnu.value < rbtnu.value;
+};
+
+
+int insertRecordInNode(BTreeNode btn, BTreeNodeUnit btnu){
+    vector<BTreeNodeUnit> v = btn.nodes;
+    for(int i = 0;i<v.size();i++){
+        //if there was empty slots in the leaf node we will add to the vector and sort
+        //then write it in it's place and move to the parent
+        if(v[i].value == DEL_FLAG && v[i].reference == DEL_FLAG){
+            v[i] = btnu;
+            sort(v.begin(),v.end(),&NodesSorterAscending);
+            btn.nodes = v;
+
+            fBTree.seekg(btn.byteOffset,ios::beg);
+            writeTreeNode(btn);
+            //then we seek the parents until we reach the root to check on the values if it needs updating
+            updateParents(btn);
+            //The new record been inserted successfully in a node with empty data and the node index is returned.
+            return getNodeRRN(btn);
+        }
+    }
+
+    return splitNode(btn,btnu);
+};
+
+int splitNode(BTreeNode btn,BTreeNodeUnit btnu){
+    //we do a split here and check if you are splitting the root as it is a special case.
+    if(btn.byteOffset/NODE_SIZE == 1 ){
+        BTreeNode btn2 = readFirstDelTreeNode();
+        fBTree.seekg(btn2.parentOrNextDel*FIELD_SIZE,ios::beg);
+        BTreeNode btn3 = readTreeNode();
+        vector<BTreeNodeUnit> v;
+        vector<BTreeNodeUnit> newV1;
+        vector<BTreeNodeUnit> newV2;
+        vector<BTreeNodeUnit> newV3;
+
+        //Gets the Records in the Full leaf nodes and adds the new record then sorts them.
+        v = btn.nodes;
+        v.push_back(btnu);
+        sort(v.begin(),v.end(),&NodesSorterAscending);
+
+        //Splits the Records vector into 2 new vectors and reassigns them into the 2 nodes
+        for(int i=0;i<v.size();i++){
+            if(i<=v.size()/2){
+                newV2.push_back(v[i]);
+            }else{
+                newV3.push_back(v[i]);
+            }
+        }
+
+        btnu.value = getBiggestNum(newV2);
+        btnu.reference = getNodeRRN(btn2);
+        newV1.push_back(btnu);
+        btnu.value = getBiggestNum(newV3);
+        btnu.reference = getNodeRRN(btn3);
+        newV1.push_back(btnu);
+
+        while(newV1.size()<M_SIZE/2){
+            newV1.push_back(getEmptyNodeUnit());
+        }
+        while(newV2.size()<M_SIZE/2){
+            newV2.push_back(getEmptyNodeUnit());
+        }
+        while(newV3.size()<M_SIZE/2){
+            newV3.push_back(getEmptyNodeUnit());
+        }
+        //Add the 2 new split node then rewrite the root node.
+
+        btn.nodes = newV1;
+        btn2.nodes = newV2;
+        btn3.nodes = newV3;
+        btn2.stateFlag = PARENT_FLAG;
+        btn2.stateFlag = LEAF_FLAG;
+        btn3.stateFlag = LEAF_FLAG;
+        fBTree.seekg(NODE_SIZE,ios::beg);
+        writeTreeNode(btn);
+        writeFirstDelTreeNode(btn2,1);
+        writeFirstDelTreeNode(btn3,1);
+        return getNodeRRN(btn3);
+    } else {
+        BTreeNode btn2 = readFirstDelTreeNode();
+        vector<BTreeNodeUnit> v;
+        vector<BTreeNodeUnit> newV1;
+        vector<BTreeNodeUnit> newV2;
+        if(btn2.byteOffset == -1){cout<<"No Available Empty Nodes for Splitting."<<endl;return -1;}
+
+        //Gets the Records in the Full leaf nodes and adds the new record then sorts them.
+        v = btn.nodes;
+        v.push_back(btnu);
+        sort(v.begin(),v.end(),&NodesSorterAscending);
+
+        //Splits the Records vector into 2 new vectors and reassigns them into the 2 nodes
+        for(int i=0;i<v.size();i++){
+            if(i<=v.size()/2){
+                newV1.push_back(v[i]);
+            }else{
+                newV2.push_back(v[i]);
+            }
+        }
+        while(newV1.size()<M_SIZE/2){
+            newV1.push_back(getEmptyNodeUnit());
+        }
+        while(newV2.size()<M_SIZE/2){
+            newV2.push_back(getEmptyNodeUnit());
+        }
+        btn.nodes = newV1;
+        btn2.nodes = newV2;
+
+        //Writes the 2 split nodes in the files
+        fBTree.seekg(btn.byteOffset,ios::beg);
+        writeTreeNode(btn);
+        btn2.stateFlag = btn.stateFlag;
+        writeFirstDelTreeNode(btn2,btn.parentOrNextDel);
+
+        //Update parent value in respect to the old node then add the new split node reference.
+        updateParents(btn);
+        fBTree.seekg(btn.parentOrNextDel*FIELD_SIZE,ios::beg);
+        btn = readTreeNode();
+        btnu.value = getBiggestNum(btn2.nodes);
+        btnu.reference = btn.byteOffset/FIELD_SIZE;
+        insertRecordInNode(btn,btnu);
+        return getNodeRRN(btn2);
+    }
 };
 
 void printFixedLengthField(int length,int value){
@@ -235,4 +393,5 @@ BTreeNode searchTillLeaf(int RecordID){
     }
 
     return btn;
-}
+};
+
