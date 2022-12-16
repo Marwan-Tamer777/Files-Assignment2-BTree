@@ -210,3 +210,29 @@ void printBTreeNode(BTreeNode btn){
     }
     cout<<endl;
 }
+
+BTreeNode searchTillLeaf(int RecordID){
+    fBTree.seekg(NODE_SIZE,ios::beg);
+    BTreeNode btn= readTreeNode();
+    vector<BTreeNodeUnit> v;
+
+    //Navigate till the leaf node that might hold the ID value.
+    while(btn.stateFlag != LEAF_FLAG){
+
+        v = btn.nodes;
+        int nextRRN;
+
+        for(int i = 0;i<v.size();i++){
+            //Takes the next Node reference until it either reaches
+            // end of vector or finds a node it's value is less than it.
+            if(v[i].value == DEL_FLAG){break;}
+            nextRRN = v[i].reference;
+            if(RecordID<= v[i].value){break;}
+        }
+
+        fBTree.seekg(nextRRN*NODE_SIZE,ios::beg);
+        btn = readTreeNode();
+    }
+
+    return btn;
+}

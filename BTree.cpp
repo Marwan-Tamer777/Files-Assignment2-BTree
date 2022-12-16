@@ -47,24 +47,9 @@ int InsertNewRecordAtIndex(char* filename, int RecordID, int Reference) {
     }
 
     //Root is not empty, we will traverse to the correct leaf node;
+    btn = searchTillLeaf(RecordID);
 
-    while(btn.stateFlag != LEAF_FLAG){
-
-        v = btn.nodes;
-        int nextRRN;
-
-        for(int i = 0;i<v.size();i++){
-            //Takes the next Node reference until it either reaches
-            // end of vector or finds a node it's value is less than it;
-            if(v[i].value == DEL_FLAG){break;}
-            nextRRN = v[i].reference;
-            if(RecordID<= v[i].value){break;}
-        }
-
-        fBTree.seekg(nextRRN*NODE_SIZE,ios::beg);
-        btn = readTreeNode();
-    }
-
+    //btn now have the leaf node that the new value should be inserted at.
     v = btn.nodes;
     for(int i = 0;i<v.size();i++){
         //if there was empty slots in the leaf node we will add to the vector and sort
@@ -103,13 +88,11 @@ int InsertNewRecordAtIndex(char* filename, int RecordID, int Reference) {
                 writeTreeNode(btn);
                 childNodeReference = fBTree.tellg()/NODE_SIZE -1;
             }
-            return 1;
-        } else {
-            //we do a split here and check if you are splitting the root as it is a special case.
+            //The new record been inserted successfully in a node with empty data and the node index is returned.
+            return btn.byteOffset/NODE_SIZE;
         }
     }
-
-
+    //we do a split here and check if you are splitting the root as it is a special case.
 };
 
 void DeleteRecordFromIndex(char* filename, int RecordID) {
@@ -129,28 +112,8 @@ void DisplayIndexFileContent(char* filename) {
 
 int SearchARecord(char* filename, int RecordID) {
 
-    fBTree.seekg(NODE_SIZE,ios::beg);
-    BTreeNode btn= readTreeNode();
+    BTreeNode btn= searchTillLeaf(RecordID);
     vector<BTreeNodeUnit> v;
-
-    //Navigate till the leaf node that might hold the ID value.
-    while(btn.stateFlag != LEAF_FLAG){
-
-        v = btn.nodes;
-        int nextRRN;
-
-        for(int i = 0;i<v.size();i++){
-            //Takes the next Node reference until it either reaches
-            // end of vector or finds a node it's value is less than it.
-            if(v[i].value == DEL_FLAG){break;}
-            nextRRN = v[i].reference;
-            if(RecordID<= v[i].value){break;}
-        }
-
-        fBTree.seekg(nextRRN*NODE_SIZE,ios::beg);
-        btn = readTreeNode();
-    }
-
     //Iterate over the Leaf's data to see if the RecordId exists.
     v = btn.nodes;
     for(int i = 0;i<v.size();i++){
