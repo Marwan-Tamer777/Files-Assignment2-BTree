@@ -496,7 +496,7 @@ int redistributeNode(BTreeNode btn){
     for(int i=0;i<siblings.size();i++){
         int numberOfNonEmptyRecord = checkUnderFlow(siblings[i].first);
         BTreeNodeUnit btnu;
-        if(numberOfNonEmptyRecord>=M_SIZE/2){
+        if(numberOfNonEmptyRecord > M_SIZE/2 ){
             //A sibling is not underflow so we take a Record from it and return it's RRN
 
             if(siblings[i].second = childRRNorIndex-1){

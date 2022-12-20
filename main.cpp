@@ -30,6 +30,7 @@ int main()
     InsertNewRecordAtIndex(f,32,240);
     DeleteRecordFromIndex(f,10);
     DeleteRecordFromIndex(f,9);
+    DeleteRecordFromIndex(f,8);
     DisplayIndexFileContent(f);
 
     int test;
