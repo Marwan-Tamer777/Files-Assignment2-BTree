@@ -22,6 +22,8 @@ struct BTreeNode{
 
 //Functions Definitions
 int splitNode(BTreeNode,BTreeNodeUnit);
+int redistributeNode(BTreeNode btn);
+void merge(BTreeNode);
 
 //Basic values for testing gets overridden in run time.
 const int DEL_FLAG = -1;
@@ -208,7 +210,7 @@ int getNodeRRN(BTreeNode btn){
 //Navigates the Tree upwards till the leaf and updates each parent with it's children Biggest value.
 void updateParents(BTreeNode btn){
     vector<BTreeNodeUnit> v = btn.nodes;
-    int childNodeReference = btn.byteOffset/NODE_SIZE;
+    int childNodeReference = getNodeRRN(btn);
 
     while(childNodeReference != 1/*btn.parentOrNextDel == DEL_FLAG*/){
 
@@ -231,7 +233,7 @@ void updateParents(BTreeNode btn){
         //Overwrite parent node in case the values should be updated;
         fBTree.seekg(btn.byteOffset,ios::beg);
         writeTreeNode(btn);
-        childNodeReference = btn.byteOffset/NODE_SIZE;
+        childNodeReference = getNodeRRN(btn);
     }
 };
 
@@ -266,7 +268,23 @@ int insertRecordInNode(BTreeNode btn, BTreeNodeUnit btnu){
     return splitNode(btn,btnu);
 };
 
+void verifyChildrenParents(BTreeNode btn){
 
+    vector<BTreeNodeUnit> v = btn.nodes;
+    for(int i=0;i<v.size();i++){
+        cout<<"DATA :"<<v[i].value<<" : "<<v[i].reference<< " : "<<getNodeRRN(btn)<<" : "<<btn.stateFlag<<endl;
+        if(v[i].value!= -1 && btn.stateFlag == PARENT_FLAG){
+            cout<<"DATA2 :"<<v[i].value<<" : "<<v[i].reference<< " : "<<getNodeRRN(btn)<<" : "<<btn.stateFlag<<endl;
+                fBTree.seekg(v[i].reference*NODE_SIZE,ios::beg);
+                BTreeNode childBtn =readTreeNode();
+                childBtn.parentOrNextDel = getNodeRRN(btn);
+                fBTree.seekg(btn.byteOffset,ios::beg);
+                writeTreeNode(childBtn);
+                verifyChildrenParents(childBtn);
+        }
+    }
+
+};
 //Takes the node you want to split and the new Record that is to be added into it.
 //It creates 2 nodes, splits the vector of the original node.
 //Write the 2 nodes again then updates parents and adds new value to the immediate of the new nodes.
@@ -326,6 +344,7 @@ int splitNode(BTreeNode btn,BTreeNodeUnit btnu){
         writeTreeNode(btn);
         writeFirstDelTreeNode(btn2,1);
         writeFirstDelTreeNode(btn3,1);
+        verifyChildrenParents(btn);
         return getNodeRRN(btn3);
     } else {
         BTreeNode btn2 = readFirstDelTreeNode();
@@ -419,3 +438,48 @@ BTreeNode searchTillLeaf(int RecordID){
     return btn;
 };
 
+
+int checkUnderFlow(BTreeNode btn){
+    //Loop though the Node's Records to see how many doesn't equal -1
+    //and returns the amount;
+
+    int numOfNonEmptyRecords;
+
+}
+//takes a node you just deleted from and check if it needs redistributing or merging.
+void verifyDeletedNode(BTreeNode btn){
+
+    //if number of used records is lower than or equal underflow M_SIZE/2
+    int nonEmptyRecords = checkUnderFlow(btn);
+    //then reistrubute
+    int redistributed = redistributeNode(btn);
+    //if redistrubtion wasn't possible return -1 if it was possible return;
+    if(redistributed == -1){
+        //redistrubtion wasn't possible then merge;
+        merge(btn);
+    }
+}
+
+int redistributeNode(BTreeNode btn){
+    //Go to parent node using parameter node and navigate to it and read it;
+    int parentIndex = btn.parentOrNextDel;
+    int childIndex = getNodeRRN(btn);
+    fBTree.seekg(parentIndex*NODE_SIZE,ios::beg);
+    BTreeNode parentBtn = readTreeNode();
+    //now check this node sibling's if they are underflow or not.
+    //if one of the right and left sibling is not underflow, then you will take either the smallest or
+    //biggest record in it and add it to the Original node and overwrite all the affected nods.
+
+    //if both sibling will be underflow, return -1;
+
+}
+
+void merge(BTreeNode btn){
+    //this functions happens when redistribution isn't possible
+    //It will take sibling's node and merge them into a new Node before
+    //OverWriting one of them and deleting the other.
+    int parentIndex = btn.parentOrNextDel;
+    int childIndex = getNodeRRN(btn);
+    fBTree.seekg(parentIndex*NODE_SIZE,ios::beg);
+    BTreeNode parentBtn = readTreeNode();
+}
