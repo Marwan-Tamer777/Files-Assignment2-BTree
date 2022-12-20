@@ -13,6 +13,7 @@ int main()
     InsertNewRecordAtIndex(f,7,24);
     InsertNewRecordAtIndex(f,10,48);
     InsertNewRecordAtIndex(f,14,72);
+    //DeleteRecordFromIndex(f, 3);
     InsertNewRecordAtIndex(f,24,60);
     InsertNewRecordAtIndex(f,19,84);
     InsertNewRecordAtIndex(f,30,96);
@@ -30,7 +31,6 @@ int main()
     InsertNewRecordAtIndex(f,32,240);
 
     DisplayIndexFileContent(f);
-
     int test;
     cout<<endl;
     test = SearchARecord(f,3);
@@ -45,5 +45,8 @@ int main()
     cout<<test<< " : ";
     test = SearchARecord(f,7);
     cout<<test<< " : ";
+
+    DeleteRecordFromIndex(f,10);
+    DisplayIndexFileContent(f);
     return 0;
 }

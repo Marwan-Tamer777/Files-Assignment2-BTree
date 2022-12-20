@@ -1,3 +1,4 @@
+//#include "utils.cpp"
 
 void CreateIndexFile(char* fileName,int numberOfRecord, int m){
     fBTree.open(fileName, ios::in | ios::out | ios::trunc);
@@ -55,10 +56,6 @@ int InsertNewRecordAtIndex(char* filename, int RecordID, int Reference) {
 
 };
 
-void DeleteRecordFromIndex(char* filename, int RecordID) {
-
-};
-
 void DisplayIndexFileContent(char* filename) {
     BTreeNode btn;
     fBTree.seekg(0,ios::beg);
@@ -83,4 +80,28 @@ int SearchARecord(char* filename, int RecordID) {
     }
 
     return -1;
+};
+
+void DeleteRecordFromIndex(char* filename, int RecordID) {
+    if(SearchARecord(filename, RecordID) != -1){
+        BTreeNode btn= searchTillLeaf(RecordID);
+        vector<BTreeNodeUnit> v;
+        //Iterate over the Leaf's data to see if the RecordId exists.
+        v = btn.nodes;
+        for(int i = 0;i<v.size();i++){
+            if(v[i].value == RecordID){
+                v[i].reference = -1;
+                v[i].value = -1;
+                btn.nodes = v;
+                fBTree.seekg(btn.byteOffset,ios::beg);
+                writeTreeNode(btn);
+                updateParents(btn);
+
+                //check if underflow;
+                //verifyDeletedNode(btn);
+                break;
+            }
+        }
+    } else cout << "Not found!";
+
 };
