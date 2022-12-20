@@ -21,9 +21,8 @@ struct BTreeNode{
 };
 
 //Functions Definitions
+void updateParents(BTreeNode);
 int splitNode(BTreeNode,BTreeNodeUnit);
-int redistributeNode(BTreeNode btn);
-void merge(BTreeNode);
 
 //Basic values for testing gets overridden in run time.
 const int DEL_FLAG = -1;
@@ -91,7 +90,7 @@ BTreeNode getEmptyNode(){
     btnu.reference = -1;
     btnu.value = -1;
 
-    for(int i=0;i<M_SIZE/2;i++){
+    for(int i=0;i<M_SIZE;i++){
         v.push_back(btnu);
     }
     btn.nodes = v;
@@ -115,7 +114,7 @@ BTreeNode readTreeNode(){
     btn.byteOffset = fBTree.tellg();
     btn.stateFlag = stoi(readBytes(fBTree, 4));
     btn.parentOrNextDel = stoi(readBytes(fBTree, 4));
-    for(int i=0;i<M_SIZE/2;i++){
+    for(int i=0;i<M_SIZE;i++){
         BTreeNodeUnit btnu;
         btnu.value = stoi(readBytes(fBTree, 4));
         btnu.reference = stoi(readBytes(fBTree, 4));
@@ -130,7 +129,7 @@ BTreeNode readTreeNode(){
     btn.byteOffset = fBTree.tellg();
     btn.stateFlag = stoi(s.substr(pos+=FIELD_SIZE,FIELD_SIZE));
     btn.parentOrNextDel = stoi(s.substr(pos+=FIELD_SIZE,FIELD_SIZE));
-    for(int i=0;i<M_SIZE/2;i++){
+    for(int i=0;i<M_SIZE;i++){
         BTreeNodeUnit btnu;
         btnu.value = stoi(s.substr(pos+=FIELD_SIZE,FIELD_SIZE));
         btnu.reference = stoi(s.substr(pos+=FIELD_SIZE,FIELD_SIZE));
@@ -207,35 +206,7 @@ int getNodeRRN(BTreeNode btn){
     return btn.byteOffset/NODE_SIZE;
 };
 
-//Navigates the Tree upwards till the leaf and updates each parent with it's children Biggest value.
-void updateParents(BTreeNode btn){
-    vector<BTreeNodeUnit> v = btn.nodes;
-    int childNodeReference = getNodeRRN(btn);
 
-    while(childNodeReference != 1/*btn.parentOrNextDel == DEL_FLAG*/){
-
-        //we start at the end of the child node to get some values;
-        int biggest = getBiggestNum(v);
-        fBTree.seekg(btn.parentOrNextDel*NODE_SIZE,ios::beg);
-
-        //get parent node details.
-        btn = readTreeNode();
-        v = btn.nodes;
-        //loop on parent references till we get the child's reference we just came from.
-        for(int x = 0;x<v.size();x++){
-            if(v[x].reference == childNodeReference){
-                v[x].value = biggest;
-                break;
-            }
-        }
-
-        btn.nodes = v;
-        //Overwrite parent node in case the values should be updated;
-        fBTree.seekg(btn.byteOffset,ios::beg);
-        writeTreeNode(btn);
-        childNodeReference = getNodeRRN(btn);
-    }
-};
 
 //Parameter function to sort the btree node units vector.
 bool NodesSorterAscending(BTreeNodeUnit const& lbtnu, BTreeNodeUnit const& rbtnu) {
@@ -268,23 +239,55 @@ int insertRecordInNode(BTreeNode btn, BTreeNodeUnit btnu){
     return splitNode(btn,btnu);
 };
 
-void verifyChildrenParents(BTreeNode btn){
+
+//Navigates the Tree upwards till the leaf and updates each parent with it's children Biggest value.
+void updateParents(BTreeNode btn){
+    vector<BTreeNodeUnit> v = btn.nodes;
+    int childNodeReference = getNodeRRN(btn);
+
+    while(childNodeReference != 1/*btn.parentOrNextDel == DEL_FLAG*/){
+
+        //we start at the end of the child node to get some values;
+        int biggest = getBiggestNum(v);
+        fBTree.seekg(btn.parentOrNextDel*NODE_SIZE,ios::beg);
+
+        //get parent node details.
+        btn = readTreeNode();
+        v = btn.nodes;
+        //loop on parent references till we get the child's reference we just came from.
+        for(int x = 0;x<v.size();x++){
+            if(v[x].reference == childNodeReference){
+                v[x].value = biggest;
+                break;
+            }
+        }
+
+        btn.nodes = v;
+        //Overwrite parent node in case the values should be updated;
+        fBTree.seekg(btn.byteOffset,ios::beg);
+        writeTreeNode(btn);
+        childNodeReference = getNodeRRN(btn);
+    }
+};
+
+//Navigates down from the node to all of it's children updating their's parent's node value
+//only used when splitting root(AKA Adding a new level to the tree.
+void updateChildren(BTreeNode btn){
 
     vector<BTreeNodeUnit> v = btn.nodes;
     for(int i=0;i<v.size();i++){
-        cout<<"DATA :"<<v[i].value<<" : "<<v[i].reference<< " : "<<getNodeRRN(btn)<<" : "<<btn.stateFlag<<endl;
         if(v[i].value!= -1 && btn.stateFlag == PARENT_FLAG){
-            cout<<"DATA2 :"<<v[i].value<<" : "<<v[i].reference<< " : "<<getNodeRRN(btn)<<" : "<<btn.stateFlag<<endl;
-                fBTree.seekg(v[i].reference*NODE_SIZE,ios::beg);
-                BTreeNode childBtn =readTreeNode();
-                childBtn.parentOrNextDel = getNodeRRN(btn);
-                fBTree.seekg(btn.byteOffset,ios::beg);
-                writeTreeNode(childBtn);
-                verifyChildrenParents(childBtn);
+            fBTree.seekg(v[i].reference*NODE_SIZE,ios::beg);
+            BTreeNode childBtn =readTreeNode();
+            childBtn.parentOrNextDel = getNodeRRN(btn);
+            fBTree.seekg(-NODE_SIZE,ios::cur);
+            writeTreeNode(childBtn);
+            updateChildren(childBtn);
         }
     }
 
 };
+
 //Takes the node you want to split and the new Record that is to be added into it.
 //It creates 2 nodes, splits the vector of the original node.
 //Write the 2 nodes again then updates parents and adds new value to the immediate of the new nodes.
@@ -321,13 +324,13 @@ int splitNode(BTreeNode btn,BTreeNodeUnit btnu){
         btnu.reference = getNodeRRN(btn3);
         newV1.push_back(btnu);
 
-        while(newV1.size()<M_SIZE/2){
+        while(newV1.size()<M_SIZE){
             newV1.push_back(getEmptyNodeUnit());
         }
-        while(newV2.size()<M_SIZE/2){
+        while(newV2.size()<M_SIZE){
             newV2.push_back(getEmptyNodeUnit());
         }
-        while(newV3.size()<M_SIZE/2){
+        while(newV3.size()<M_SIZE){
             newV3.push_back(getEmptyNodeUnit());
         }
         //Add the 2 new split node then rewrite the root node.
@@ -344,7 +347,7 @@ int splitNode(BTreeNode btn,BTreeNodeUnit btnu){
         writeTreeNode(btn);
         writeFirstDelTreeNode(btn2,1);
         writeFirstDelTreeNode(btn3,1);
-        verifyChildrenParents(btn);
+        updateChildren(btn);
         return getNodeRRN(btn3);
     } else {
         BTreeNode btn2 = readFirstDelTreeNode();
@@ -366,10 +369,10 @@ int splitNode(BTreeNode btn,BTreeNodeUnit btnu){
                 newV2.push_back(v[i]);
             }
         }
-        while(newV1.size()<M_SIZE/2){
+        while(newV1.size()<M_SIZE){
             newV1.push_back(getEmptyNodeUnit());
         }
-        while(newV2.size()<M_SIZE/2){
+        while(newV2.size()<M_SIZE){
             newV2.push_back(getEmptyNodeUnit());
         }
         btn.nodes = newV1;
@@ -442,37 +445,109 @@ BTreeNode searchTillLeaf(int RecordID){
 int checkUnderFlow(BTreeNode btn){
     //Loop though the Node's Records to see how many doesn't equal -1
     //and returns the amount;
-
-    int numOfNonEmptyRecords;
-
-}
-//takes a node you just deleted from and check if it needs redistributing or merging.
-void verifyDeletedNode(BTreeNode btn){
-
-    //if number of used records is lower than or equal underflow M_SIZE/2
-    int nonEmptyRecords = checkUnderFlow(btn);
-    //then reistrubute
-    int redistributed = redistributeNode(btn);
-    //if redistrubtion wasn't possible return -1 if it was possible return;
-    if(redistributed == -1){
-        //redistrubtion wasn't possible then merge;
-        merge(btn);
+    int numOfNonEmptyRecords = 0;
+    vector<BTreeNodeUnit> v = btn.nodes;
+    for(int i=0;i<v.size();i++){
+        if(v[i].value != DEL_FLAG &&  v[i].reference != DEL_FLAG){
+            numOfNonEmptyRecords++;
+        }
     }
-}
+
+    return numOfNonEmptyRecords;
+};
 
 int redistributeNode(BTreeNode btn){
     //Go to parent node using parameter node and navigate to it and read it;
     int parentIndex = btn.parentOrNextDel;
-    int childIndex = getNodeRRN(btn);
+    int childRRNorIndex = getNodeRRN(btn);
     fBTree.seekg(parentIndex*NODE_SIZE,ios::beg);
     BTreeNode parentBtn = readTreeNode();
-    //now check this node sibling's if they are underflow or not.
+    vector<BTreeNodeUnit> parentRecords = parentBtn.nodes;
+
+    //Now check this node sibling's if they are underflow or not.
+    //We store the Sibling nodes and indexes in an array to know which is right and left.
+    //And to hold 0, 1,2 node depending on the amount of sibling.
+    vector<pair<BTreeNode,int>> siblings;
+
+    for(int i=0;i<parentRecords.size();i++){
+        if(parentRecords[i].reference == childRRNorIndex){
+            childRRNorIndex = i;
+            if(i-1>=0 && parentRecords[i-1].reference!= DEL_FLAG){
+                fBTree.seekg(parentRecords[i-1].reference*NODE_SIZE,ios::beg);
+                pair<BTreeNode,int> p;
+                p.first =readTreeNode();
+                p.second = i-1;
+                siblings.push_back(p);
+            }
+
+            if(i+1<parentRecords.size() && parentRecords[i+1].reference!= DEL_FLAG){
+                fBTree.seekg(parentRecords[i+1].reference*NODE_SIZE,ios::beg);
+                pair<BTreeNode,int> p;
+                p.first =readTreeNode();
+                p.second = i+1;
+                siblings.push_back(p);
+            }
+            break;
+        }
+    }
+
     //if one of the right and left sibling is not underflow, then you will take either the smallest or
     //biggest record in it and add it to the Original node and overwrite all the affected nods.
+    for(int i=0;i<siblings.size();i++){
+        int numberOfNonEmptyRecord = checkUnderFlow(siblings[i].first);
+        BTreeNodeUnit btnu;
+        if(numberOfNonEmptyRecord>=M_SIZE/2){
+            //A sibling is not underflow so we take a Record from it and return it's RRN
+
+            if(siblings[i].second = childRRNorIndex-1){
+                //The non-underflow sibling if the left so we use the biggest value in it.
+                int index;
+                for(int x=0;x<siblings[i].first.nodes.size();x++){
+                    if(siblings[i].first.nodes[x].reference!= DEL_FLAG){
+                        btnu = siblings[i].first.nodes[x];
+                        index = x;
+                    }
+                }
+                btn.nodes[M_SIZE/2] = btnu;
+                siblings[i].first.nodes[index].value = DEL_FLAG;
+                siblings[i].first.nodes[index].reference = DEL_FLAG;
+
+                sort(siblings[i].first.nodes.begin(),siblings[i].first.nodes.end(),&NodesSorterAscending);
+                sort(btn.nodes.begin(),btn.nodes.end(),&NodesSorterAscending);
+
+                fBTree.seekg(btn.byteOffset,ios::beg);
+                writeTreeNode(btn);
+                fBTree.seekg(siblings[i].first.byteOffset,ios::beg);
+                writeTreeNode(siblings[i].first);
+
+                updateParents(btn);
+                updateParents(siblings[i].first);
+            } else if(siblings[i].second = childRRNorIndex+1){
+                //The non-underflow sibling if the left so we use the smallest value in it.
+                btnu = siblings[i].first.nodes[0];
+                btn.nodes[M_SIZE/2] = btnu;
+                siblings[i].first.nodes[0].value = DEL_FLAG;
+                siblings[i].first.nodes[0].reference = DEL_FLAG;
+
+                sort(siblings[i].first.nodes.begin(),siblings[i].first.nodes.end(),&NodesSorterAscending);
+                sort(btn.nodes.begin(),btn.nodes.end(),&NodesSorterAscending);
+
+                fBTree.seekg(btn.byteOffset,ios::beg);
+                writeTreeNode(btn);
+                fBTree.seekg(siblings[i].first.byteOffset,ios::beg);
+                writeTreeNode(siblings[i].first);
+
+                updateParents(btn);
+                updateParents(siblings[i].first);
+            }
+
+            return getNodeRRN(siblings[i].first);
+        }
+    }
 
     //if both sibling will be underflow, return -1;
-
-}
+    return -1;
+};
 
 void merge(BTreeNode btn){
     //this functions happens when redistribution isn't possible
@@ -482,4 +557,22 @@ void merge(BTreeNode btn){
     int childIndex = getNodeRRN(btn);
     fBTree.seekg(parentIndex*NODE_SIZE,ios::beg);
     BTreeNode parentBtn = readTreeNode();
+};
+
+//takes a node you just deleted from and check if it needs redistributing or merging.
+void fixNodeAfteDelete(BTreeNode btn){
+
+    //if number of used records is lower than or equal underflow M_SIZE/2
+    int nonEmptyRecords = checkUnderFlow(btn);
+    if(nonEmptyRecords<M_SIZE/2){
+        //then redistribute
+        int redistributed = redistributeNode(btn);
+        //if redistribution wasn't possible return -1 if it was possible return;
+        if(redistributed == -1){
+            //redistribution wasn't possible then merge;
+            merge(btn);
+        }
+    }
+
+
 }

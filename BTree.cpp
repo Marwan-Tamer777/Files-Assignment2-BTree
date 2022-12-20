@@ -4,7 +4,7 @@ void CreateIndexFile(char* fileName,int numberOfRecord, int m){
     fBTree.open(fileName, ios::in | ios::out | ios::trunc);
     NUM_OF_RECORDS = numberOfRecord;
     M_SIZE = m;
-    NODE_SIZE = FIELD_SIZE*(2+M_SIZE) + NODE_DELIMITER.length();
+    NODE_SIZE = FIELD_SIZE*(2+(M_SIZE*2)) + NODE_DELIMITER.length();
 
     fBTree.seekg(0,ios::beg);
     BTreeNode btn;
@@ -13,7 +13,7 @@ void CreateIndexFile(char* fileName,int numberOfRecord, int m){
     btnu.reference = -1;
     btnu.value = -1;
 
-    for(int i=0;i<M_SIZE/2;i++){
+    for(int i=0;i<M_SIZE;i++){
         v.push_back(btnu);
     }
 
@@ -98,10 +98,10 @@ void DeleteRecordFromIndex(char* filename, int RecordID) {
                 updateParents(btn);
 
                 //check if underflow;
-                //verifyDeletedNode(btn);
+                fixNodeAfteDelete(btn);
                 break;
             }
         }
-    } else cout << "Not found!";
+    } else{cout << "Not found!";}
 
 };
