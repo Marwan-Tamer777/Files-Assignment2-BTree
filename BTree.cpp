@@ -85,23 +85,7 @@ int SearchARecord(char* filename, int RecordID) {
 void DeleteRecordFromIndex(char* filename, int RecordID) {
     if(SearchARecord(filename, RecordID) != -1){
         BTreeNode btn= searchTillLeaf(RecordID);
-        vector<BTreeNodeUnit> v;
-        //Iterate over the Leaf's data to see if the RecordId exists.
-        v = btn.nodes;
-        for(int i = 0;i<v.size();i++){
-            if(v[i].value == RecordID){
-                v[i].reference = -1;
-                v[i].value = -1;
-                btn.nodes = v;
-                fBTree.seekg(btn.byteOffset,ios::beg);
-                writeTreeNode(btn);
-                updateParents(btn);
-
-                //check if underflow;
-                fixNodeAfteDelete(btn);
-                break;
-            }
-        }
+        deleteRecordFromNode(btn,RecordID);
     } else{cout << "Not found!";}
 
 };

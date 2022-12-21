@@ -22,6 +22,7 @@ struct BTreeNode{
 
 //Functions Definitions
 void updateParents(BTreeNode);
+void fixNodeAfterDelete(BTreeNode);
 int splitNode(BTreeNode,BTreeNodeUnit);
 
 //Basic values for testing gets overridden in run time.
@@ -456,6 +457,26 @@ int checkUnderFlow(BTreeNode btn){
     return numOfNonEmptyRecords;
 };
 
+void deleteRecordFromNode(BTreeNode btn,int RecordID){
+    vector<BTreeNodeUnit> v;
+    //Iterate over the Node's data to see if the RecordId exists.
+    v = btn.nodes;
+    for(int i = 0;i<v.size();i++){
+        if(v[i].value == RecordID){
+            v[i].reference = -1;
+            v[i].value = -1;
+            sort(v.begin(),v.end(),&NodesSorterAscending);
+            btn.nodes = v;
+            fBTree.seekg(btn.byteOffset,ios::beg);
+            writeTreeNode(btn);
+            updateParents(btn);
+            //check if underflow;
+            fixNodeAfterDelete(btn);
+            break;
+        }
+    }
+};
+
 int redistributeNode(BTreeNode btn){
     //Go to parent node using parameter node and navigate to it and read it;
     int parentIndex = btn.parentOrNextDel;
@@ -557,10 +578,83 @@ void merge(BTreeNode btn){
     int childIndex = getNodeRRN(btn);
     fBTree.seekg(parentIndex*NODE_SIZE,ios::beg);
     BTreeNode parentBtn = readTreeNode();
+    vector<BTreeNodeUnit> parentRecords = parentBtn.nodes;
+    vector<pair<BTreeNode,int>> siblings;
+
+    //We get the available left and right siblings for the node we deleted a record from.
+    for(int i=0;i<parentRecords.size();i++){
+        if(parentRecords[i].reference == childIndex){
+            if(i-1>=0 && parentRecords[i-1].reference!= DEL_FLAG){
+                fBTree.seekg(parentRecords[i-1].reference*NODE_SIZE,ios::beg);
+                pair<BTreeNode,int> p;
+                p.first =readTreeNode();
+                p.second = i-1;
+                siblings.push_back(p);
+            }
+
+            if(i+1<parentRecords.size() && parentRecords[i+1].reference!= DEL_FLAG){
+                fBTree.seekg(parentRecords[i+1].reference*NODE_SIZE,ios::beg);
+                pair<BTreeNode,int> p;
+                p.first =readTreeNode();
+                p.second = i+1;
+                siblings.push_back(p);
+            }
+            break;
+        }
+    }
+
+
+    for(int i=0;i<siblings.size();i++){
+        int numberOfNonEmptyRecord = checkUnderFlow(siblings[i].first);
+        vector<BTreeNodeUnit> childNodes = btn.nodes;
+        vector<BTreeNodeUnit> siblingsNodes;
+
+        //If the sibling is underflow then we will merge it with our child node.
+        //If we find an underFlow sibling we will add its values from
+        // 0 to numberOfNonEmptyRecord into our child nodes from M_SIZE/2 to M_SIZE/2 + numberOfNonEmptyRecord
+        if(numberOfNonEmptyRecord <= M_SIZE/2 ){
+            siblingsNodes = siblings[i].first.nodes;
+            int siblingBiggestRecord = getBiggestNum(siblingsNodes);
+
+            for(int x=0;x<numberOfNonEmptyRecord;x++){
+                childNodes[(M_SIZE/2)+x] = siblingsNodes[x];
+                siblingsNodes[x] = getEmptyNodeUnit();
+            }
+
+            //Now the child node have been merged and we need to overwrite it in the file.
+            sort(childNodes.begin(),childNodes.end(),&NodesSorterAscending);
+            btn.nodes = childNodes;
+            fBTree.seekg(btn.byteOffset,ios::beg);
+            writeTreeNode(btn);
+            updateParents(btn);
+
+            //Now we need to delete the sibling node from the whole tree.
+
+            //First we delete the sibling's record from the parent
+            deleteRecordFromNode(parentBtn,siblingBiggestRecord);
+
+            //Then we add the newly emptied sibling to the tree and availList.
+            siblings[i].first.nodes = siblingsNodes;
+            siblings[i].first.stateFlag = DEL_FLAG;
+
+            fBTree.seekg(0,ios::beg);
+            BTreeNode head = readTreeNode();
+
+            siblings[i].first.parentOrNextDel = head.parentOrNextDel;
+            head.parentOrNextDel = getNodeRRN(siblings[i].first);
+
+            fBTree.seekg(siblings[i].first.byteOffset,ios::beg);
+            writeTreeNode(siblings[i].first);
+            fBTree.seekg(0,ios::beg);
+            writeTreeNode(head);
+            break;
+        }
+    }
+
 };
 
 //takes a node you just deleted from and check if it needs redistributing or merging.
-void fixNodeAfteDelete(BTreeNode btn){
+void fixNodeAfterDelete(BTreeNode btn){
 
     //if number of used records is lower than or equal underflow M_SIZE/2
     int nonEmptyRecords = checkUnderFlow(btn);
